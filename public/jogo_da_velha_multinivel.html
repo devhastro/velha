@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Jogo da Velha Multinível</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+body {
+  background: radial-gradient(circle at top, #0f172a, #020617);
+  color: #e5e7eb;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 16px;
+}
+
+h1 { margin: 0 0 12px; text-align: center; }
+
+#lobby {
+  max-width: 1280px;
+  margin: 0 auto 14px;
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+#lobbyControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+input, select, button {
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 8px 10px;
+}
+
+button { cursor: pointer; }
+button:hover { background: #1e293b; }
+
+#roomInfo {
+  margin-top: 8px;
+  color: #93c5fd;
+  font-size: 14px;
+}
+
+#roomList {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.room-card {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px;
+  background: #0b1220;
+  font-size: 13px;
+}
+
+.room-actions { margin-top: 8px; display: flex; gap: 8px; }
+
+#controls {
+  max-width: 1280px;
+  margin: 0 auto 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+#playRow {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+#boardColumn { display: flex; flex-direction: column; align-items: center; }
+
+.timer-container {
+  width: 600px;
+  height: 18px;
+  background: #1e293b;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.timer-bar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  transition: width 1s linear;
+}
+
+.timer-text { margin: 6px; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 600px;
+  height: 600px;
+}
+
+.quadrant {
+  background: #020617;
+  border: 4px solid #334155;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  position: relative;
+}
+
+.quadrant.active { border-color: #22c55e; box-shadow: 0 0 12px #22c55e; }
+
+.cell {
+  border: 1px solid #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.cell.X { color: #38bdf8; }
+.cell.O { color: #fb7185; }
+
+.quadrant-winner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 100px;
+  font-weight: bold;
+  background: rgba(2,6,23,0.92);
+}
+.quadrant-winner.X { color: #38bdf8; }
+.quadrant-winner.O { color: #fb7185; }
+.quadrant-winner.velha { color: #eab308; font-size: 120px; }
+
+#finalWinner { margin-top: 15px; font-size: 26px; color: #22c55e; min-height: 32px; }
+
+#moveLogPanel {
+  width: 320px;
+  min-height: 600px;
+  max-height: 640px;
+  background: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 10px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+#moveLogList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  max-height: 560px;
+}
+
+.log-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; background: #0f172a; font-size: 13px; border-left: 3px solid #475569; }
+.log-item.move-X { border-left-color: #38bdf8; }
+.log-item.move-O { border-left-color: #fb7185; }
+.log-item.quad-win { border-left-color: #22c55e; }
+.log-item.quad-velha, .log-item.game-velha { border-left-color: #eab308; }
+
+#toastContainer {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 200;
+  max-width: 360px;
+}
+
+.move-toast {
+  background: #1e293b;
+  border: 2px solid #38bdf8;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+<h1>Jogo da Velha Multinível</h1>
+
+<section id="lobby">
+  <div id="lobbyControls">
+    <label>Seu nome: <input id="myName" maxlength="24" value="Jogador"></label>
+    <label>Sala: <input id="roomInput" placeholder="ex: sala-1"></label>
+    <button id="joinPlayerBtn">Entrar como jogador</button>
+    <button id="watchBtn">Assistir sala</button>
+    <button id="leaveRoomBtn">Sair da sala</button>
+    <button id="refreshRoomsBtn">Atualizar salas</button>
+  </div>
+  <div id="roomInfo">Você ainda não entrou em uma sala.</div>
+  <div id="roomList"></div>
+</section>
+
+<div id="controls">
+  Jogador X: <input id="namePlayerX" readonly placeholder="Aguardando...">
+  Jogador O: <input id="namePlayerO" readonly placeholder="Aguardando...">
+  <span id="lanStatus" style="color:#94a3b8;font-size:14px;"></span>
+  Tempo (s): <input type="number" id="timeInput" value="10" min="1">
+  <label><input type="checkbox" id="noTimeLimit"> Sem limite de tempo</label>
+  <label><input type="checkbox" id="notifyOpponent" checked> Notificar adversário</label>
+  <button id="startBtn">Iniciar</button>
+  <button id="restartBtn">Recomeçar</button>
+</div>
+
+<div id="playRow">
+  <div id="boardColumn">
+    <div class="timer-text" id="timerText"></div>
+    <div class="timer-container" id="timerContainer"><div class="timer-bar" id="timerBar"></div></div>
+    <div class="board" id="board"></div>
+    <div id="finalWinner"></div>
+  </div>
+  <aside id="moveLogPanel">
+    <h3>Últimas jogadas</h3>
+    <ul id="moveLogList"></ul>
+  </aside>
+</div>
+
+<script>
+const socket = io();
+
+// Lobby / salas
+let currentRoomId = null;
+let myRole = null; // X | O | null
+let isSpectator = false;
+let roomsCache = [];
+
+const myNameInput = document.getElementById("myName");
+const roomInput = document.getElementById("roomInput");
+const roomInfo = document.getElementById("roomInfo");
+const roomList = document.getElementById("roomList");
+const joinPlayerBtn = document.getElementById("joinPlayerBtn");
+const watchBtn = document.getElementById("watchBtn");
+const leaveRoomBtn = document.getElementById("leaveRoomBtn");
+const refreshRoomsBtn = document.getElementById("refreshRoomsBtn");
+
+// Jogo
+const namePlayerX = document.getElementById("namePlayerX");
+const namePlayerO = document.getElementById("namePlayerO");
+const lanStatus = document.getElementById("lanStatus");
+const timeInput = document.getElementById("timeInput");
+const noTimeLimitCheck = document.getElementById("noTimeLimit");
+const notifyOpponentCheck = document.getElementById("notifyOpponent");
+const timerText = document.getElementById("timerText");
+const timerContainer = document.getElementById("timerContainer");
+const timerBar = document.getElementById("timerBar");
+const board = document.getElementById("board");
+const finalWinnerEl = document.getElementById("finalWinner");
+const moveLogList = document.getElementById("moveLogList");
+const toastContainer = document.getElementById("toastContainer");
+
+let playerNames = { X: "Jogador X", O: "Jogador O" };
+let currentPlayer = "X";
+let forcedQuadrant = null;
+let timeLimit = 10;
+let noTimeLimit = false;
+let timer;
+let timeLeft;
+let gameStarted = false;
+let gameOver = false;
+let quadrants = [];
+let moveLog = [];
+let moveCounter = 0;
+
+const wins = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function canPlayNow() {
+  if (!currentRoomId || isSpectator) return false;
+  return myRole === currentPlayer;
+}
+
+function showToast(title, text) {
+  const el = document.createElement("div");
+  el.className = "move-toast";
+  el.innerHTML = "<strong>" + title + "</strong><br>" + text;
+  toastContainer.appendChild(el);
+  setTimeout(() => el.remove(), 6500);
+}
+
+function updateRoomInfo() {
+  if (!currentRoomId) {
+    roomInfo.textContent = "Você ainda não entrou em uma sala.";
+    lanStatus.textContent = "";
+    return;
+  }
+  if (isSpectator) {
+    roomInfo.textContent = "Sala atual: " + currentRoomId + " (assistindo)";
+    lanStatus.textContent = "Modo espectador";
+  } else {
+    roomInfo.textContent = "Sala atual: " + currentRoomId + " | Você é " + myRole;
+    lanStatus.textContent = "Você é " + myRole + " (" + (playerNames[myRole] || myRole) + ")";
+  }
+}
+
+function renderRoomsList() {
+  roomList.innerHTML = "";
+  if (!roomsCache.length) {
+    roomList.textContent = "Nenhuma sala ativa no momento.";
+    return;
+  }
+  for (const room of roomsCache) {
+    const card = document.createElement("div");
+    card.className = "room-card";
+    card.innerHTML =
+      "<div><strong>" + room.roomId + "</strong></div>" +
+      "<div>X: " + (room.playerX || "-") + " | O: " + (room.playerO || "-") + "</div>" +
+      "<div>Espectadores: " + room.spectatorCount + " | " + (room.started ? "Em jogo" : "Aguardando") + "</div>";
+
+    const actions = document.createElement("div");
+    actions.className = "room-actions";
+
+    const watch = document.createElement("button");
+    watch.textContent = "Assistir";
+    watch.onclick = () => socket.emit("watchRoom", { roomId: room.roomId, name: myNameInput.value });
+    actions.appendChild(watch);
+
+    const join = document.createElement("button");
+    join.textContent = "Entrar";
+    join.disabled = !room.hasFreeSlot;
+    join.onclick = () => socket.emit("joinRoomAsPlayer", { roomId: room.roomId, name: myNameInput.value });
+    actions.appendChild(join);
+
+    card.appendChild(actions);
+    roomList.appendChild(card);
+  }
+}
+
+function applyRoomState(state) {
+  playerNames.X = state.players.X || "Jogador X";
+  playerNames.O = state.players.O || "Jogador O";
+  namePlayerX.value = state.players.X || "";
+  namePlayerO.value = state.players.O || "";
+  if (!gameStarted && state.started && state.gameConfig) runStartGame(state.gameConfig);
+  updateRoomInfo();
+}
+
+joinPlayerBtn.onclick = () => {
+  socket.emit("joinRoomAsPlayer", { roomId: roomInput.value, name: myNameInput.value });
+};
+
+watchBtn.onclick = () => {
+  socket.emit("watchRoom", { roomId: roomInput.value, name: myNameInput.value });
+};
+
+leaveRoomBtn.onclick = () => {
+  socket.emit("leaveRoom");
+  currentRoomId = null;
+  myRole = null;
+  isSpectator = false;
+  updateRoomInfo();
+};
+
+refreshRoomsBtn.onclick = () => socket.emit("listRooms");
+
+socket.on("roomsSnapshot", (rooms) => {
+  roomsCache = rooms || [];
+  renderRoomsList();
+});
+
+socket.on("roomJoined", ({ roomId, role, spectator }) => {
+  currentRoomId = roomId;
+  myRole = role;
+  isSpectator = !!spectator;
+  roomInput.value = roomId;
+  updateRoomInfo();
+  if (isSpectator) showToast("Assistindo sala", roomId);
+});
+
+socket.on("roomState", (state) => {
+  if (!currentRoomId || state.roomId !== currentRoomId) return;
+  applyRoomState(state);
+});
+
+socket.on("roomError", ({ message }) => {
+  alert(message || "Erro de sala");
+});
+
+// ---------- Log ----------
+function renderMoveLog() {
+  moveLogList.innerHTML = "";
+  for (const item of moveLog) {
+    const li = document.createElement("li");
+    li.className = "log-item " + (item.className || "");
+    li.textContent = item.text;
+    moveLogList.appendChild(li);
+  }
+  moveLogList.scrollTop = moveLogList.scrollHeight;
+}
+
+function addLog(text, className) {
+  moveLog.push({ text, className });
+  if (moveLog.length > 60) moveLog.shift();
+  renderMoveLog();
+}
+
+function clearLog() {
+  moveLog = [];
+  moveCounter = 0;
+  renderMoveLog();
+}
+
+function formatCellRef(qIndex, cellIndex) {
+  return "Q" + (qIndex + 1) + " · casa " + (cellIndex + 1);
+}
+
+// ---------- Jogo ----------
+function updateTimerUI() {
+  noTimeLimit = noTimeLimitCheck.checked;
+  timeInput.disabled = noTimeLimit;
+  timerContainer.style.display = noTimeLimit ? "none" : "block";
+}
+
+noTimeLimitCheck.onchange = () => {
+  updateTimerUI();
+  if (gameStarted && !gameOver) startTimer();
+};
+
+function checkWinner(cells) {
+  for (const [a,b,c] of wins) {
+    if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
+  }
+  return null;
+}
+
+function isQuadrantVelha(q) {
+  return !q.winner && q.cells.every((c) => c !== null);
+}
+
+function allQuadrantsResolved() {
+  return quadrants.length === 9 && quadrants.every((q) => q.winner || q.cells.every((c) => c !== null));
+}
+
+function startTimer() {
+  clearInterval(timer);
+  if (gameOver) return;
+  timerText.textContent = "Vez de: " + playerNames[currentPlayer] + " (" + currentPlayer + ")";
+  if (noTimeLimit) return;
+  timeLeft = timeLimit;
+  timerBar.style.width = "100%";
+  timer = setInterval(() => {
+    timeLeft--;
+    timerBar.style.width = (timeLeft / timeLimit) * 100 + "%";
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      autoPlay();
+    }
+  }, 1000);
+}
+
+function validQuadrants() {
+  if (forcedQuadrant !== null && !quadrants[forcedQuadrant].winner && quadrants[forcedQuadrant].cells.includes(null)) {
+    return [forcedQuadrant];
+  }
+  return quadrants.map((q, i) => !q.winner && q.cells.includes(null) ? i : null).filter((v) => v !== null);
+}
+
+function autoPlay() {
+  if (gameOver) return;
+  if (!canPlayNow()) return;
+  const qs = validQuadrants();
+  if (!qs.length) return;
+  const q = qs[Math.floor(Math.random() * qs.length)];
+  const empty = quadrants[q].cells.map((v, i) => v ? null : i).filter((v) => v !== null);
+  if (!empty.length) return;
+  const c = empty[Math.floor(Math.random() * empty.length)];
+  playMove(q, c);
+}
+
+function createQuadrant(i) {
+  const el = document.createElement("div");
+  el.className = "quadrant";
+  const state = { cells: Array(9).fill(null), winner: null };
+  for (let c = 0; c < 9; c++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.onclick = () => {
+      if (!validQuadrants().includes(i) || !canPlayNow()) return;
+      playMove(i, c);
+    };
+    el.appendChild(cell);
+  }
+  quadrants[i] = state;
+  return el;
+}
+
+function updateActiveQuadrant() {
+  document.querySelectorAll(".quadrant").forEach((q, i) => {
+    q.classList.remove("active");
+    if (!gameOver && validQuadrants().includes(i)) q.classList.add("active");
+  });
+}
+
+function checkFinalWinner() {
+  const w = checkWinner(quadrants.map((q) => q.winner));
+  if (w) {
+    gameOver = true;
+    finalWinnerEl.textContent = "🏆 " + playerNames[w] + " venceu o jogo!";
+    clearInterval(timer);
+    return;
+  }
+  if (allQuadrantsResolved()) {
+    gameOver = true;
+    finalWinnerEl.textContent = "Velha — empate no jogo!";
+    addLog("V Jogo final empatado (velha)", "game-velha");
+    clearInterval(timer);
+  }
+}
+
+function applyMove(qIndex, cellIndex, movingPlayer, fromNetwork) {
+  if (gameOver) return;
+  const q = quadrants[qIndex];
+  if (!q || q.winner || q.cells[cellIndex]) return;
+
+  if (!fromNetwork && !canPlayNow()) return;
+
+  q.cells[cellIndex] = movingPlayer;
+  const cell = board.children[qIndex].children[cellIndex];
+  cell.textContent = movingPlayer;
+  cell.classList.add(movingPlayer);
+
+  moveCounter++;
+  const moveText = moveCounter + ". " + (playerNames[movingPlayer] || movingPlayer) + " (" + movingPlayer + ") → " + formatCellRef(qIndex, cellIndex);
+  addLog(moveText, "move-" + movingPlayer);
+
+  if (fromNetwork && notifyOpponentCheck.checked && movingPlayer !== myRole && !isSpectator) {
+    showToast("Adversário jogou", moveText);
+  }
+
+  const w = checkWinner(q.cells);
+  if (w) {
+    q.winner = w;
+    const overlay = document.createElement("div");
+    overlay.className = "quadrant-winner " + w;
+    overlay.textContent = w;
+    board.children[qIndex].appendChild(overlay);
+    addLog("Quadrante " + (qIndex + 1) + ": " + playerNames[w] + " (" + w + ") venceu", "quad-win");
+    checkFinalWinner();
+  } else if (isQuadrantVelha(q)) {
+    const overlay = document.createElement("div");
+    overlay.className = "quadrant-winner velha";
+    overlay.textContent = "V";
+    board.children[qIndex].appendChild(overlay);
+    addLog("V Quadrante " + (qIndex + 1) + " empatou (velha)", "quad-velha");
+    checkFinalWinner();
+  }
+
+  forcedQuadrant = cellIndex;
+  if (!validQuadrants().includes(forcedQuadrant)) forcedQuadrant = null;
+  currentPlayer = movingPlayer === "X" ? "O" : "X";
+  updateActiveQuadrant();
+  startTimer();
+
+  if (!fromNetwork && currentRoomId && !isSpectator) {
+    socket.emit("playMove", { qIndex, cellIndex, player: movingPlayer });
+  }
+}
+
+function playMove(qIndex, cellIndex) {
+  applyMove(qIndex, cellIndex, currentPlayer, false);
+}
+
+function runStartGame(options) {
+  clearInterval(timer);
+  board.innerHTML = "";
+  quadrants = [];
+  finalWinnerEl.textContent = "";
+  clearLog();
+  gameOver = false;
+  gameStarted = true;
+
+  playerNames.X = options.playerX || playerNames.X || "Jogador X";
+  playerNames.O = options.playerO || playerNames.O || "Jogador O";
+  namePlayerX.value = playerNames.X;
+  namePlayerO.value = playerNames.O;
+
+  noTimeLimitCheck.checked = !!options.noTimeLimit;
+  timeLimit = parseInt(options.timeLimit, 10) || 10;
+  timeInput.value = timeLimit;
+  updateTimerUI();
+
+  currentPlayer = "X";
+  forcedQuadrant = null;
+  for (let i = 0; i < 9; i++) board.appendChild(createQuadrant(i));
+  updateActiveQuadrant();
+  startTimer();
+}
+
+function buildPayload() {
+  return {
+    playerX: namePlayerX.value || playerNames.X || "Jogador X",
+    playerO: namePlayerO.value || playerNames.O || "Jogador O",
+    timeLimit: parseInt(timeInput.value, 10) || 10,
+    noTimeLimit: noTimeLimitCheck.checked
+  };
+}
+
+document.getElementById("startBtn").onclick = () => {
+  if (!currentRoomId || isSpectator || !myRole) {
+    alert("Entre como jogador em uma sala para iniciar.");
+    return;
+  }
+  const payload = buildPayload();
+  runStartGame(payload);
+  socket.emit("startGame", payload);
+};
+
+document.getElementById("restartBtn").onclick = () => {
+  if (!currentRoomId || isSpectator || !myRole) {
+    alert("Entre como jogador em uma sala para recomeçar.");
+    return;
+  }
+  const payload = buildPayload();
+  runStartGame(payload);
+  socket.emit("restartGame", payload);
+};
+
+socket.on("playMove", (data) => applyMove(data.qIndex, data.cellIndex, data.player, true));
+socket.on("startGame", (data) => runStartGame(data));
+socket.on("restartGame", (data) => runStartGame(data));
+
+updateTimerUI();
+socket.emit("listRooms");
+</script>
+</body>
+</html>
