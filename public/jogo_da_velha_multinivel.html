@@ -42,10 +42,44 @@ input, select, button {
 button { cursor: pointer; }
 button:hover { background: #1e293b; }
 
+#connectionStatus {
+  text-align: center;
+  font-size: 14px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#connectionStatus.ok {
+  background: #14532d66;
+  color: #86efac;
+  border: 1px solid #22c55e;
+}
+
+#connectionStatus.err {
+  background: #7f1d1d66;
+  color: #fca5a5;
+  border: 1px solid #ef4444;
+}
+
+#connectionStatus.wait {
+  background: #1e3a5f66;
+  color: #93c5fd;
+  border: 1px solid #3b82f6;
+}
+
 #roomInfo {
   margin-top: 8px;
   color: #93c5fd;
   font-size: 14px;
+}
+
+#roomInfo.joined {
+  color: #86efac;
+  font-weight: bold;
 }
 
 #roomList {
@@ -184,6 +218,11 @@ button:hover { background: #1e293b; }
   gap: 8px;
   z-index: 200;
   max-width: 360px;
+  pointer-events: none;
+}
+
+#toastContainer .move-toast {
+  pointer-events: auto;
 }
 
 .move-toast {
@@ -198,6 +237,7 @@ button:hover { background: #1e293b; }
 <body>
 <div id="toastContainer"></div>
 <h1>Jogo da Velha Multinível</h1>
+<div id="connectionStatus" class="wait">Conectando ao servidor...</div>
 
 <section id="lobby">
   <div id="lobbyControls">
@@ -237,7 +277,14 @@ button:hover { background: #1e293b; }
 </div>
 
 <script>
-const socket = io();
+if (typeof io === "undefined") {
+  document.body.innerHTML =
+    "<h1 style='color:#f87171;font-family:Arial;text-align:center;margin-top:40px'>" +
+    "Servidor offline. Abra pelo endereço do Node (ex: http://localhost:3000), não abrindo o arquivo HTML direto.</h1>";
+  throw new Error("socket.io não carregou");
+}
+
+const socket = io({ transports: ["websocket", "polling"], reconnection: true });
 
 // Lobby / salas
 let currentRoomId = null;
@@ -253,6 +300,7 @@ const joinPlayerBtn = document.getElementById("joinPlayerBtn");
 const watchBtn = document.getElementById("watchBtn");
 const leaveRoomBtn = document.getElementById("leaveRoomBtn");
 const refreshRoomsBtn = document.getElementById("refreshRoomsBtn");
+const connectionStatus = document.getElementById("connectionStatus");
 
 // Jogo
 const namePlayerX = document.getElementById("namePlayerX");
@@ -293,12 +341,51 @@ function canPlayNow() {
   return myRole === currentPlayer;
 }
 
+function setConnectionStatus(kind, message) {
+  connectionStatus.className = kind;
+  connectionStatus.textContent = message;
+}
+
 function showToast(title, text) {
+  if (!toastContainer) return;
   const el = document.createElement("div");
   el.className = "move-toast";
-  el.innerHTML = "<strong>" + title + "</strong><br>" + text;
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const span = document.createElement("span");
+  span.textContent = text;
+  el.appendChild(strong);
+  el.appendChild(document.createElement("br"));
+  el.appendChild(span);
   toastContainer.appendChild(el);
   setTimeout(() => el.remove(), 6500);
+}
+
+function getJoinPayload() {
+  return {
+    roomId: roomInput.value.trim(),
+    name: myNameInput.value.trim(),
+  };
+}
+
+function tryJoinAsPlayer() {
+  const payload = getJoinPayload();
+  if (!payload.name) {
+    alert("Digite seu nome antes de entrar.");
+    myNameInput.focus();
+    return;
+  }
+  if (!socket.connected) {
+    alert("Sem conexão com o servidor. Rode npm start e abra http://localhost:3000");
+    return;
+  }
+  joinPlayerBtn.disabled = true;
+  joinPlayerBtn.textContent = "Entrando...";
+  socket.emit("joinRoomAsPlayer", payload);
+  setTimeout(() => {
+    joinPlayerBtn.disabled = false;
+    joinPlayerBtn.textContent = "Entrar como jogador";
+  }, 2500);
 }
 
 function updateRoomInfo() {
@@ -358,21 +445,41 @@ function applyRoomState(state) {
   updateRoomInfo();
 }
 
-joinPlayerBtn.onclick = () => {
-  socket.emit("joinRoomAsPlayer", { roomId: roomInput.value, name: myNameInput.value });
-};
+joinPlayerBtn.onclick = tryJoinAsPlayer;
 
 watchBtn.onclick = () => {
-  socket.emit("watchRoom", { roomId: roomInput.value, name: myNameInput.value });
+  const payload = getJoinPayload();
+  if (!payload.roomId) {
+    alert("Digite o nome da sala para assistir.");
+    roomInput.focus();
+    return;
+  }
+  if (!socket.connected) {
+    alert("Sem conexão com o servidor.");
+    return;
+  }
+  socket.emit("watchRoom", payload);
 };
+
+roomInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") tryJoinAsPlayer();
+});
+myNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") tryJoinAsPlayer();
+});
 
 leaveRoomBtn.onclick = () => {
   socket.emit("leaveRoom");
+};
+
+socket.on("roomLeft", () => {
   currentRoomId = null;
   myRole = null;
   isSpectator = false;
+  roomInfo.classList.remove("joined");
   updateRoomInfo();
-};
+  showToast("Saiu da sala", "Você saiu da partida.");
+});
 
 refreshRoomsBtn.onclick = () => socket.emit("listRooms");
 
@@ -386,8 +493,13 @@ socket.on("roomJoined", ({ roomId, role, spectator }) => {
   myRole = role;
   isSpectator = !!spectator;
   roomInput.value = roomId;
+  roomInfo.classList.add("joined");
   updateRoomInfo();
-  if (isSpectator) showToast("Assistindo sala", roomId);
+  if (isSpectator) {
+    showToast("Modo espectador", "Você está assistindo a sala " + roomId);
+  } else {
+    showToast("Entrou na sala!", roomId + " — você é o jogador " + role);
+  }
 });
 
 socket.on("roomState", (state) => {
@@ -396,7 +508,25 @@ socket.on("roomState", (state) => {
 });
 
 socket.on("roomError", ({ message }) => {
+  roomInfo.classList.remove("joined");
   alert(message || "Erro de sala");
+});
+
+socket.on("connect", () => {
+  setConnectionStatus("ok", "Conectado ao servidor — pode entrar na sala.");
+  socket.emit("listRooms");
+});
+
+socket.on("disconnect", () => {
+  setConnectionStatus("err", "Desconectado do servidor. Verifique se npm start está rodando.");
+  roomInfo.classList.remove("joined");
+});
+
+socket.on("connect_error", () => {
+  setConnectionStatus(
+    "err",
+    "Não conectou ao servidor. Use http://localhost:3000 (ou a URL do Render), não abra o .html direto."
+  );
 });
 
 // ---------- Log ----------

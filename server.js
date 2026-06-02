@@ -171,6 +171,8 @@ function joinAsSpectator(socket, { roomId, name }) {
 }
 
 io.on("connection", (socket) => {
+  socket.data = {};
+
   emitRoomsSnapshot();
 
   socket.on("listRooms", () => {
@@ -178,15 +180,26 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoomAsPlayer", (payload = {}) => {
-    joinAsPlayer(socket, payload);
+    try {
+      joinAsPlayer(socket, payload);
+    } catch (err) {
+      console.error("joinRoomAsPlayer:", err);
+      socket.emit("roomError", { message: "Erro ao entrar na sala. Tente novamente." });
+    }
   });
 
   socket.on("watchRoom", (payload = {}) => {
-    joinAsSpectator(socket, payload);
+    try {
+      joinAsSpectator(socket, payload);
+    } catch (err) {
+      console.error("watchRoom:", err);
+      socket.emit("roomError", { message: "Erro ao assistir sala." });
+    }
   });
 
   socket.on("leaveRoom", () => {
     detachSocketFromRoom(socket);
+    socket.emit("roomLeft");
   });
 
   socket.on("playMove", (data) => {
