@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Jogo da Velha Multinível</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root {
+  --bg: #070b14;
+  --surface: rgba(15, 23, 42, 0.72);
+  --surface-solid: #0f172a;
+  --border: rgba(148, 163, 184, 0.14);
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #22c55e;
+  --accent-soft: rgba(34, 197, 94, 0.12);
+  --blue: #38bdf8;
+  --pink: #fb7185;
+  --radius: 14px;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: "DM Sans", system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56, 189, 248, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(34, 197, 94, 0.08), transparent),
+    var(--bg);
+  padding: 24px 16px 48px;
+}
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.site-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.site-header h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.site-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+#connectionStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px auto 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+}
+
+#connectionStatus.ok {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: var(--accent-soft);
+}
+
+#connectionStatus.err {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(127, 29, 29, 0.25);
+}
+
+#connectionStatus.wait {
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(30, 58, 95, 0.35);
+}
+
+.card {
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.card-sub {
+  margin: 0 0 18px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+input[type="text"],
+input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.5);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.95rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+input:read-only {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  transition: transform 0.12s, background 0.15s, border-color 0.15s;
+}
+
+button:hover { transform: translateY(-1px); }
+button:active { transform: translateY(0); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #052e16;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.btn-primary:hover { filter: brightness(1.06); }
+
+.btn-secondary {
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#roomInfo {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px dashed var(--border);
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+#roomInfo.joined {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+#roomList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+#roomList.empty-msg {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.room-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: rgba(2, 6, 23, 0.45);
+  transition: border-color 0.15s;
+}
+
+.room-card:hover { border-color: rgba(148, 163, 184, 0.28); }
+
+.room-card .room-id {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.room-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.room-meta span {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-live {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.badge-wait {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+}
+
+.room-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.room-actions button {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.players-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex: 1;
+  min-width: 240px;
+}
+
+.players-row .field { flex: 1; min-width: 140px; }
+
+#lanStatus {
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: -4px 0 4px;
+}
+
+.options-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.check-label input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+#playRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+#boardColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.timer-container {
+  width: 600px;
+  height: 18px;
+  background: #1e293b;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.timer-bar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  transition: width 1s linear;
+}
+
+.timer-text { margin: 6px; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 600px;
+  height: 600px;
+}
+
+.quadrant {
+  background: #020617;
+  border: 4px solid #334155;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  position: relative;
+}
+
+.quadrant.active { border-color: #22c55e; box-shadow: 0 0 12px #22c55e; }
+
+.cell {
+  border: 1px solid #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.cell.X { color: #38bdf8; }
+.cell.O { color: #fb7185; }
+
+.quadrant-winner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 100px;
+  font-weight: bold;
+  background: rgba(2,6,23,0.92);
+}
+.quadrant-winner.X { color: #38bdf8; }
+.quadrant-winner.O { color: #fb7185; }
+.quadrant-winner.velha { color: #eab308; font-size: 120px; }
+
+#finalWinner { margin-top: 15px; font-size: 26px; color: #22c55e; min-height: 32px; }
+
+#moveLogPanel {
+  width: 300px;
+  min-height: 600px;
+  max-height: 640px;
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+#moveLogPanel h3 {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+#moveLogList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  max-height: 580px;
+}
+
+#moveLogList:empty::after {
+  content: "Nenhuma jogada ainda.";
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.log-item {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.5);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  border-left: 3px solid #475569;
+}
+
+.log-item.move-X { border-left-color: var(--blue); }
+.log-item.move-O { border-left-color: var(--pink); }
+.log-item.quad-win { border-left-color: var(--accent); }
+.log-item.quad-velha,
+.log-item.game-velha { border-left-color: #eab308; }
+
+#toastContainer {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 340px;
+  pointer-events: none;
+}
+
+.move-toast {
+  pointer-events: auto;
+  background: var(--surface-solid);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 0.85rem;
+  box-shadow: var(--shadow);
+  animation: toastIn 0.3s ease;
+}
+
+.move-toast strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 720px) {
+  .card { padding: 16px; }
+  #moveLogPanel { width: 100%; min-height: 280px; }
+}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+
+<div class="app">
+  <header class="site-header">
+    <h1>Jogo da Velha Multinível</h1>
+    <p>Salas independentes · jogue online ou assista outras partidas</p>
+    <div id="connectionStatus" class="wait">Conectando ao servidor...</div>
+  </header>
+
+  <section id="lobby" class="card">
+    <h2 class="card-title">Salas</h2>
+    <p class="card-sub">Entre em uma sala nova ou existente. Cada sala é uma partida separada.</p>
+
+    <div class="form-grid">
+      <div class="field">
+        <label for="myName">Seu nome</label>
+        <input id="myName" type="text" maxlength="24" value="Jogador" autocomplete="nickname">
+      </div>
+      <div class="field">
+        <label for="roomInput">Nome da sala</label>
+        <input id="roomInput" type="text" placeholder="ex: sala-1 (vazio = nova)">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button type="button" id="joinPlayerBtn" class="btn-primary">Entrar como jogador</button>
+      <button type="button" id="watchBtn" class="btn-secondary">Assistir</button>
+      <button type="button" id="leaveRoomBtn" class="btn-ghost">Sair da sala</button>
+      <button type="button" id="refreshRoomsBtn" class="btn-ghost">Atualizar lista</button>
+    </div>
+
+    <div id="roomInfo">Você ainda não entrou em uma sala.</div>
+    <div id="roomList"></div>
+  </section>
+
+  <section id="controls" class="card">
+    <h2 class="card-title">Partida</h2>
+    <p class="card-sub">Configurações e jogadores da sala atual.</p>
+    <div id="lanStatus"></div>
+    <div class="players-row">
+      <div class="field">
+        <label for="namePlayerX">Jogador X</label>
+        <input id="namePlayerX" type="text" readonly placeholder="Aguardando...">
+      </div>
+      <div class="field">
+        <label for="namePlayerO">Jogador O</label>
+        <input id="namePlayerO" type="text" readonly placeholder="Aguardando...">
+      </div>
+    </div>
+    <div class="options-row">
+      <div class="field" style="max-width:100px">
+        <label for="timeInput">Tempo (s)</label>
+        <input type="number" id="timeInput" value="10" min="1">
+      </div>
+      <label class="check-label"><input type="checkbox" id="noTimeLimit"> Sem limite de tempo</label>
+      <label class="check-label"><input type="checkbox" id="notifyOpponent" checked> Notificar adversário</label>
+      <button type="button" id="startBtn" class="btn-primary">Iniciar</button>
+      <button type="button" id="restartBtn" class="btn-secondary">Recomeçar</button>
+    </div>
+  </section>
+
+  <div id="playRow">
+  <div id="boardColumn">
+    <div class="timer-text" id="timerText"></div>
+    <div class="timer-container" id="timerContainer"><div class="timer-bar" id="timerBar"></div></div>
+    <div class="board" id="board"></div>
+    <div id="finalWinner"></div>
+  </div>
+  <aside id="moveLogPanel">
+    <h3>Últimas jogadas</h3>
+    <ul id="moveLogList"></ul>
+  </aside>
+  </div>
+</div>
+
+<script>
+if (typeof io === "undefined") {
+  document.body.innerHTML =
+    "<h1 style='color:#f87171;font-family:Arial;text-align:center;margin-top:40px'>" +
+    "Servidor offline. Abra pelo endereço do Node (ex: http://localhost:3000), não abrindo o arquivo HTML direto.</h1>";
+  throw new Error("socket.io não carregou");
+}
+
+const GAME_TYPE = "velha";
+const socket = io({ transports: ["websocket", "polling"], reconnection: true });
+
+// Lobby / salas
+let currentRoomId = null;
+let myRole = null; // X | O | null
+let isSpectator = false;
+let roomsCache = [];
+
+const myNameInput = document.getElementById("myName");
+const roomInput = document.getElementById("roomInput");
+const roomInfo = document.getElementById("roomInfo");
+const roomList = document.getElementById("roomList");
+const joinPlayerBtn = document.getElementById("joinPlayerBtn");
+const watchBtn = document.getElementById("watchBtn");
+const leaveRoomBtn = document.getElementById("leaveRoomBtn");
+const refreshRoomsBtn = document.getElementById("refreshRoomsBtn");
+const connectionStatus = document.getElementById("connectionStatus");
+
+// Jogo
+const namePlayerX = document.getElementById("namePlayerX");
+const namePlayerO = document.getElementById("namePlayerO");
+const lanStatus = document.getElementById("lanStatus");
+const timeInput = document.getElementById("timeInput");
+const noTimeLimitCheck = document.getElementById("noTimeLimit");
+const notifyOpponentCheck = document.getElementById("notifyOpponent");
+const timerText = document.getElementById("timerText");
+const timerContainer = document.getElementById("timerContainer");
+const timerBar = document.getElementById("timerBar");
+const board = document.getElementById("board");
+const finalWinnerEl = document.getElementById("finalWinner");
+const moveLogList = document.getElementById("moveLogList");
+const toastContainer = document.getElementById("toastContainer");
+
+let playerNames = { X: "Jogador X", O: "Jogador O" };
+let currentPlayer = "X";
+let forcedQuadrant = null;
+let timeLimit = 10;
+let noTimeLimit = false;
+let timer;
+let timeLeft;
+let gameStarted = false;
+let gameOver = false;
+let quadrants = [];
+let moveLog = [];
+let moveCounter = 0;
+
+const wins = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function canPlayNow() {
+  if (!currentRoomId || isSpectator) return false;
+  return myRole === currentPlayer;
+}
+
+function setConnectionStatus(kind, message) {
+  connectionStatus.className = kind;
+  connectionStatus.textContent = message;
+}
+
+function showToast(title, text) {
+  if (!toastContainer) return;
+  const el = document.createElement("div");
+  el.className = "move-toast";
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const span = document.createElement("span");
+  span.textContent = text;
+  el.appendChild(strong);
+  el.appendChild(document.createElement("br"));
+  el.appendChild(span);
+  toastContainer.appendChild(el);
+  setTimeout(() => el.remove(), 6500);
+}
+
+function getJoinPayload() {
+  return {
+    roomId: roomInput.value.trim(),
+    name: myNameInput.value.trim(),
+    gameType: GAME_TYPE,
+  };
+}
+
+function filterRooms(list) {
+  return (list || []).filter((r) => (r.gameType || "velha") === GAME_TYPE);
+}
+
+function tryJoinAsPlayer() {
+  const payload = getJoinPayload();
+  if (!payload.name) {
+    alert("Digite seu nome antes de entrar.");
+    myNameInput.focus();
+    return;
+  }
+  if (!socket.connected) {
+    alert("Sem conexão com o servidor. Rode npm start e abra http://localhost:3000");
+    return;
+  }
+  joinPlayerBtn.disabled = true;
+  joinPlayerBtn.textContent = "Entrando...";
+  socket.emit("joinRoomAsPlayer", payload);
+  setTimeout(() => {
+    joinPlayerBtn.disabled = false;
+    joinPlayerBtn.textContent = "Entrar como jogador";
+  }, 2500);
+}
+
+function updateRoomInfo() {
+  if (!currentRoomId) {
+    roomInfo.textContent = "Você ainda não entrou em uma sala.";
+    lanStatus.textContent = "";
+    return;
+  }
+  if (isSpectator) {
+    roomInfo.textContent = "Sala atual: " + currentRoomId + " (assistindo)";
+    lanStatus.textContent = "Modo espectador";
+  } else {
+    roomInfo.textContent = "Sala atual: " + currentRoomId + " | Você é " + myRole;
+    lanStatus.textContent = "Você é " + myRole + " (" + (playerNames[myRole] || myRole) + ")";
+  }
+}
+
+function renderRoomsList() {
+  const filtered = filterRooms(roomsCache);
+  roomList.innerHTML = "";
+  roomList.classList.remove("empty-msg");
+  if (!filtered.length) {
+    roomList.classList.add("empty-msg");
+    roomList.textContent = "Nenhuma sala ativa. Crie uma entrando com um nome de sala ou deixe vazio.";
+    return;
+  }
+  for (const room of filtered) {
+    const card = document.createElement("div");
+    card.className = "room-card";
+
+    const title = document.createElement("div");
+    title.className = "room-id";
+    title.textContent = room.roomId;
+
+    const meta = document.createElement("div");
+    meta.className = "room-meta";
+    meta.innerHTML =
+      "<span>X: " + (room.playerX || "—") + "</span>" +
+      "<span>O: " + (room.playerO || "—") + "</span><br>" +
+      "<span>" + room.spectatorCount + " assistindo</span> " +
+      '<span class="badge ' + (room.started ? "badge-live" : "badge-wait") + '">' +
+      (room.started ? "Em jogo" : "Aguardando") + "</span>";
+
+    const actions = document.createElement("div");
+    actions.className = "room-actions";
+
+    const watch = document.createElement("button");
+    watch.type = "button";
+    watch.className = "btn-secondary";
+    watch.textContent = "Assistir";
+    watch.onclick = () => socket.emit("watchRoom", { roomId: room.roomId, name: myNameInput.value, gameType: GAME_TYPE });
+    actions.appendChild(watch);
+
+    const join = document.createElement("button");
+    join.type = "button";
+    join.className = "btn-primary";
+    join.textContent = "Entrar";
+    join.disabled = !room.hasFreeSlot;
+    join.onclick = () => socket.emit("joinRoomAsPlayer", { roomId: room.roomId, name: myNameInput.value, gameType: GAME_TYPE });
+    actions.appendChild(join);
+
+    card.appendChild(title);
+    card.appendChild(meta);
+    card.appendChild(actions);
+    roomList.appendChild(card);
+  }
+}
+
+function applyRoomState(state) {
+  playerNames.X = state.players.X || "Jogador X";
+  playerNames.O = state.players.O || "Jogador O";
+  namePlayerX.value = state.players.X || "";
+  namePlayerO.value = state.players.O || "";
+  if (!gameStarted && state.started && state.gameConfig) runStartGame(state.gameConfig);
+  updateRoomInfo();
+}
+
+joinPlayerBtn.onclick = tryJoinAsPlayer;
+
+watchBtn.onclick = () => {
+  const payload = getJoinPayload();
+  if (!payload.roomId) {
+    alert("Digite o nome da sala para assistir.");
+    roomInput.focus();
+    return;
+  }
+  if (!socket.connected) {
+    alert("Sem conexão com o servidor.");
+    return;
+  }
+  socket.emit("watchRoom", payload);
+};
+
+roomInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") tryJoinAsPlayer();
+});
+myNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") tryJoinAsPlayer();
+});
+
+leaveRoomBtn.onclick = () => {
+  socket.emit("leaveRoom");
+};
+
+socket.on("roomLeft", () => {
+  currentRoomId = null;
+  myRole = null;
+  isSpectator = false;
+  roomInfo.classList.remove("joined");
+  updateRoomInfo();
+  showToast("Saiu da sala", "Você saiu da partida.");
+});
+
+refreshRoomsBtn.onclick = () => socket.emit("listRooms", { gameType: GAME_TYPE });
+
+socket.on("roomsSnapshot", (rooms) => {
+  roomsCache = rooms || [];
+  renderRoomsList();
+});
+
+socket.on("roomJoined", ({ roomId, role, spectator }) => {
+  currentRoomId = roomId;
+  myRole = role;
+  isSpectator = !!spectator;
+  roomInput.value = roomId;
+  roomInfo.classList.add("joined");
+  updateRoomInfo();
+  if (isSpectator) {
+    showToast("Modo espectador", "Você está assistindo a sala " + roomId);
+  } else {
+    showToast("Entrou na sala!", roomId + " — você é o jogador " + role);
+  }
+});
+
+socket.on("roomState", (state) => {
+  if (!currentRoomId || state.roomId !== currentRoomId) return;
+  applyRoomState(state);
+});
+
+socket.on("roomError", ({ message }) => {
+  roomInfo.classList.remove("joined");
+  alert(message || "Erro de sala");
+});
+
+socket.on("connect", () => {
+  setConnectionStatus("ok", "Conectado ao servidor — pode entrar na sala.");
+  socket.emit("listRooms", { gameType: GAME_TYPE });
+});
+
+socket.on("disconnect", () => {
+  setConnectionStatus("err", "Desconectado do servidor. Verifique se npm start está rodando.");
+  roomInfo.classList.remove("joined");
+});
+
+socket.on("connect_error", () => {
+  setConnectionStatus(
+    "err",
+    "Não conectou ao servidor. Use http://localhost:3000 (ou a URL do Render), não abra o .html direto."
+  );
+});
+
+// ---------- Log ----------
+function renderMoveLog() {
+  moveLogList.innerHTML = "";
+  for (const item of moveLog) {
+    const li = document.createElement("li");
+    li.className = "log-item " + (item.className || "");
+    li.textContent = item.text;
+    moveLogList.appendChild(li);
+  }
+  moveLogList.scrollTop = moveLogList.scrollHeight;
+}
+
+function addLog(text, className) {
+  moveLog.push({ text, className });
+  if (moveLog.length > 60) moveLog.shift();
+  renderMoveLog();
+}
+
+function clearLog() {
+  moveLog = [];
+  moveCounter = 0;
+  renderMoveLog();
+}
+
+function formatCellRef(qIndex, cellIndex) {
+  return "Q" + (qIndex + 1) + " · casa " + (cellIndex + 1);
+}
+
+// ---------- Jogo ----------
+function updateTimerUI() {
+  noTimeLimit = noTimeLimitCheck.checked;
+  timeInput.disabled = noTimeLimit;
+  timerContainer.style.display = noTimeLimit ? "none" : "block";
+}
+
+noTimeLimitCheck.onchange = () => {
+  updateTimerUI();
+  if (gameStarted && !gameOver) startTimer();
+};
+
+function checkWinner(cells) {
+  for (const [a,b,c] of wins) {
+    if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
+  }
+  return null;
+}
+
+function isQuadrantVelha(q) {
+  return !q.winner && q.cells.every((c) => c !== null);
+}
+
+function allQuadrantsResolved() {
+  return quadrants.length === 9 && quadrants.every((q) => q.winner || q.cells.every((c) => c !== null));
+}
+
+function startTimer() {
+  clearInterval(timer);
+  if (gameOver) return;
+  timerText.textContent = "Vez de: " + playerNames[currentPlayer] + " (" + currentPlayer + ")";
+  if (noTimeLimit) return;
+  timeLeft = timeLimit;
+  timerBar.style.width = "100%";
+  timer = setInterval(() => {
+    timeLeft--;
+    timerBar.style.width = (timeLeft / timeLimit) * 100 + "%";
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      autoPlay();
+    }
+  }, 1000);
+}
+
+function validQuadrants() {
+  if (forcedQuadrant !== null && !quadrants[forcedQuadrant].winner && quadrants[forcedQuadrant].cells.includes(null)) {
+    return [forcedQuadrant];
+  }
+  return quadrants.map((q, i) => !q.winner && q.cells.includes(null) ? i : null).filter((v) => v !== null);
+}
+
+function autoPlay() {
+  if (gameOver) return;
+  if (!canPlayNow()) return;
+  const qs = validQuadrants();
+  if (!qs.length) return;
+  const q = qs[Math.floor(Math.random() * qs.length)];
+  const empty = quadrants[q].cells.map((v, i) => v ? null : i).filter((v) => v !== null);
+  if (!empty.length) return;
+  const c = empty[Math.floor(Math.random() * empty.length)];
+  playMove(q, c);
+}
+
+function createQuadrant(i) {
+  const el = document.createElement("div");
+  el.className = "quadrant";
+  const state = { cells: Array(9).fill(null), winner: null };
+  for (let c = 0; c < 9; c++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.onclick = () => {
+      if (!validQuadrants().includes(i) || !canPlayNow()) return;
+      playMove(i, c);
+    };
+    el.appendChild(cell);
+  }
+  quadrants[i] = state;
+  return el;
+}
+
+function updateActiveQuadrant() {
+  document.querySelectorAll(".quadrant").forEach((q, i) => {
+    q.classList.remove("active");
+    if (!gameOver && validQuadrants().includes(i)) q.classList.add("active");
+  });
+}
+
+function checkFinalWinner() {
+  const w = checkWinner(quadrants.map((q) => q.winner));
+  if (w) {
+    gameOver = true;
+    finalWinnerEl.textContent = "🏆 " + playerNames[w] + " venceu o jogo!";
+    clearInterval(timer);
+    return;
+  }
+  if (allQuadrantsResolved()) {
+    gameOver = true;
+    finalWinnerEl.textContent = "Velha — empate no jogo!";
+    addLog("V Jogo final empatado (velha)", "game-velha");
+    clearInterval(timer);
+  }
+}
+
+function applyMove(qIndex, cellIndex, movingPlayer, fromNetwork) {
+  if (gameOver) return;
+  const q = quadrants[qIndex];
+  if (!q || q.winner || q.cells[cellIndex]) return;
+
+  if (!fromNetwork && !canPlayNow()) return;
+
+  q.cells[cellIndex] = movingPlayer;
+  const cell = board.children[qIndex].children[cellIndex];
+  cell.textContent = movingPlayer;
+  cell.classList.add(movingPlayer);
+
+  moveCounter++;
+  const moveText = moveCounter + ". " + (playerNames[movingPlayer] || movingPlayer) + " (" + movingPlayer + ") → " + formatCellRef(qIndex, cellIndex);
+  addLog(moveText, "move-" + movingPlayer);
+
+  if (fromNetwork && notifyOpponentCheck.checked && movingPlayer !== myRole && !isSpectator) {
+    showToast("Adversário jogou", moveText);
+  }
+
+  const w = checkWinner(q.cells);
+  if (w) {
+    q.winner = w;
+    const overlay = document.createElement("div");
+    overlay.className = "quadrant-winner " + w;
+    overlay.textContent = w;
+    board.children[qIndex].appendChild(overlay);
+    addLog("Quadrante " + (qIndex + 1) + ": " + playerNames[w] + " (" + w + ") venceu", "quad-win");
+    checkFinalWinner();
+  } else if (isQuadrantVelha(q)) {
+    const overlay = document.createElement("div");
+    overlay.className = "quadrant-winner velha";
+    overlay.textContent = "V";
+    board.children[qIndex].appendChild(overlay);
+    addLog("V Quadrante " + (qIndex + 1) + " empatou (velha)", "quad-velha");
+    checkFinalWinner();
+  }
+
+  forcedQuadrant = cellIndex;
+  if (!validQuadrants().includes(forcedQuadrant)) forcedQuadrant = null;
+  currentPlayer = movingPlayer === "X" ? "O" : "X";
+  updateActiveQuadrant();
+  startTimer();
+
+  if (!fromNetwork && currentRoomId && !isSpectator) {
+    socket.emit("playMove", { qIndex, cellIndex, player: movingPlayer });
+  }
+}
+
+function playMove(qIndex, cellIndex) {
+  applyMove(qIndex, cellIndex, currentPlayer, false);
+}
+
+function runStartGame(options) {
+  clearInterval(timer);
+  board.innerHTML = "";
+  quadrants = [];
+  finalWinnerEl.textContent = "";
+  clearLog();
+  gameOver = false;
+  gameStarted = true;
+
+  playerNames.X = options.playerX || playerNames.X || "Jogador X";
+  playerNames.O = options.playerO || playerNames.O || "Jogador O";
+  namePlayerX.value = playerNames.X;
+  namePlayerO.value = playerNames.O;
+
+  noTimeLimitCheck.checked = !!options.noTimeLimit;
+  timeLimit = parseInt(options.timeLimit, 10) || 10;
+  timeInput.value = timeLimit;
+  updateTimerUI();
+
+  currentPlayer = "X";
+  forcedQuadrant = null;
+  for (let i = 0; i < 9; i++) board.appendChild(createQuadrant(i));
+  updateActiveQuadrant();
+  startTimer();
+}
+
+function buildPayload() {
+  return {
+    playerX: namePlayerX.value || playerNames.X || "Jogador X",
+    playerO: namePlayerO.value || playerNames.O || "Jogador O",
+    timeLimit: parseInt(timeInput.value, 10) || 10,
+    noTimeLimit: noTimeLimitCheck.checked
+  };
+}
+
+document.getElementById("startBtn").onclick = () => {
+  if (!currentRoomId || isSpectator || !myRole) {
+    alert("Entre como jogador em uma sala para iniciar.");
+    return;
+  }
+  const payload = buildPayload();
+  runStartGame(payload);
+  socket.emit("startGame", payload);
+};
+
+document.getElementById("restartBtn").onclick = () => {
+  if (!currentRoomId || isSpectator || !myRole) {
+    alert("Entre como jogador em uma sala para recomeçar.");
+    return;
+  }
+  const payload = buildPayload();
+  runStartGame(payload);
+  socket.emit("restartGame", payload);
+};
+
+socket.on("playMove", (data) => applyMove(data.qIndex, data.cellIndex, data.player, true));
+socket.on("startGame", (data) => runStartGame(data));
+socket.on("restartGame", (data) => runStartGame(data));
+
+updateTimerUI();
+socket.emit("listRooms", { gameType: GAME_TYPE });
+</script>
+</body>
+</html>

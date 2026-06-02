@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salão de Jogos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app-shell.css">
+</head>
+<body class="shell">
+<aside class="game-sidebar" id="gameSidebar" aria-label="Seleção de jogos">
+  <div class="sidebar-brand">
+    <h1>Salão de Jogos</h1>
+    <p>Escolha o jogo e jogue online na rede</p>
+  </div>
+  <nav class="sidebar-nav" id="gameNav">
+    <button type="button" class="game-nav-btn active" data-game="velha" data-src="/jogo_da_velha_multinivel.html">
+      <span class="icon" aria-hidden="true">⊞</span>
+      <span>
+        <span class="label">Velha Multinível</span>
+        <span class="desc">9 mini-tabuleiros · salas LAN</span>
+      </span>
+    </button>
+    <button type="button" class="game-nav-btn" data-game="xadrez" data-src="/xadrez.html">
+      <span class="icon" aria-hidden="true">♚</span>
+      <span>
+        <span class="label">Xadrez</span>
+        <span class="desc">Clássico 8×8 · brancas vs pretas</span>
+      </span>
+    </button>
+  </nav>
+  <div class="sidebar-footer">Servidor Node + Socket.IO</div>
+</aside>
+
+<main class="shell-main">
+  <iframe id="gameFrame" title="Jogo selecionado" src="/jogo_da_velha_multinivel.html"></iframe>
+</main>
+
+<button type="button" class="sidebar-toggle" id="sidebarToggle" aria-expanded="false">☰ Jogos</button>
+
+<script>
+const STORAGE_KEY = "salaoJogoAtivo";
+const frame = document.getElementById("gameFrame");
+const nav = document.getElementById("gameNav");
+const shell = document.body;
+const toggle = document.getElementById("sidebarToggle");
+
+function selectGame(btn) {
+  const src = btn.dataset.src;
+  if (!src) return;
+  nav.querySelectorAll(".game-nav-btn").forEach((b) => b.classList.toggle("active", b === btn));
+  frame.src = src;
+  localStorage.setItem(STORAGE_KEY, btn.dataset.game);
+  shell.classList.remove("sidebar-open");
+  toggle.setAttribute("aria-expanded", "false");
+}
+
+nav.addEventListener("click", (e) => {
+  const btn = e.target.closest(".game-nav-btn");
+  if (btn) selectGame(btn);
+});
+
+toggle.addEventListener("click", () => {
+  const open = shell.classList.toggle("sidebar-open");
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+});
+
+const saved = localStorage.getItem(STORAGE_KEY);
+if (saved) {
+  const btn = nav.querySelector('[data-game="' + saved + '"]');
+  if (btn) selectGame(btn);
+}
+</script>
+</body>
+</html>
